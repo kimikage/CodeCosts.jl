@@ -1,0 +1,16 @@
+language: julia
+os:
+    - osx
+    - linux
+    - windows
+julia:
+    - 1.0
+    - 1
+    - nightly
+notifications:
+    email: false
+jobs:
+  include:
+    - julia: 1
+      os: linux
+      arch: x86
