@@ -1,8 +1,8 @@
 # CodeCosts.jl
 
-This package provides a variant of `@code_typed` with estimated costs for the
-inlining. This helps find the factors which are preventing the SIMD
-vectorization.
+This package provides a variant of `@code_typed` with [estimated costs for the
+inlining](https://docs.julialang.org/en/v1/devdocs/inference/#The-inlining-algorithm-(inline_worthy)-1).
+This helps find the factors which are preventing the SIMD vectorization.
 
 ```julia
 julia> using CodeCosts
