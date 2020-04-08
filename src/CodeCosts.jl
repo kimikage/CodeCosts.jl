@@ -32,10 +32,13 @@ function CostsSummary(cost_threshold::Int, costs::Vector{Int})
                  sort!(middle, rev=true), sort!(expensive, rev=true))
 end
 
+struct Hint{ID} end
+
 struct CodeCostsInfo
     ci::Core.CodeInfo
     costs::Vector{Int}
     summary::CostsSummary
+    hints::Vector{Tuple{Int,Hint}}
 end
 
 
@@ -54,6 +57,9 @@ function code_costs(f, types; debuginfo=:default,
 
     mi = Base.method_instances(f, types)[1]
     ci = code_typed(f, types)[1][1]
+    # eliminate code_coverage_effect
+    filter!(statement->!Meta.isexpr(statement, :code_coverage_effect), ci.code)
+
     opt = Core.Compiler.OptimizationState(mi, params)
     opt.src.inlineable = true
     sptypes = :sptypes in fieldnames(typeof(opt)) ? opt.sptypes : opt.sp
@@ -65,8 +71,8 @@ function code_costs(f, types; debuginfo=:default,
     costs = map(cost, ci.code)
     cost_threshold = opt.params.inline_cost_threshold
     summary = CostsSummary(cost_threshold, costs)
-
-    CodeCostsInfo(ci, costs, summary)
+    hint_messages = Vector{Tuple{Int,Hint}}()
+    CodeCostsInfo(ci, costs, summary, hint_messages)
 end
 
 function Base.show(io::IO, costsinfo::CodeCostsInfo; debuginfo::Symbol=:source)

@@ -5,7 +5,7 @@ os:
     - windows
 julia:
     - 1.0
-    - 1
+    - 1.4 # explicitly specify 1.4 instead of 1 as a workaround
     - nightly
 notifications:
     email: false
@@ -14,3 +14,5 @@ jobs:
     - julia: 1
       os: linux
       arch: x86
+after_success:
+    - julia -e 'using Pkg; Pkg.add("Coverage"); using Coverage; Codecov.submit(process_folder())'
