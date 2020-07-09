@@ -50,29 +50,53 @@ macro code_costs(ex0...)
     end
 end
 
+if isdefined(Core.Compiler, :OptimizationParams)
+    function code_costs(f, types; debuginfo=:default,
+                        params::Core.Compiler.OptimizationParams=Core.Compiler.OptimizationParams(),
+                        hints=:default)
 
-function code_costs(f, types; debuginfo=:default,
-                    params::Core.Compiler.Params=Core.Compiler.Params(typemax(UInt)),
-                    hints=:default)
+        mi = Base.method_instances(f, types)[1]
+        ci = code_typed(f, types)[1][1]
+        # eliminate code_coverage_effect
+        filter!(statement->!Meta.isexpr(statement, :code_coverage_effect), ci.code)
 
-    mi = Base.method_instances(f, types)[1]
-    ci = code_typed(f, types)[1][1]
-    # eliminate code_coverage_effect
-    filter!(statement->!Meta.isexpr(statement, :code_coverage_effect), ci.code)
+        interp = Core.Compiler.NativeInterpreter()
+        opt = Core.Compiler.OptimizationState(mi, params, interp)
 
-    opt = Core.Compiler.OptimizationState(mi, params)
-    opt.src.inlineable = true
-    sptypes = :sptypes in fieldnames(typeof(opt)) ? opt.sptypes : opt.sp
-
-    cost(statement) = 0
-    function cost(statement::Expr)
-        Core.Compiler.statement_cost(statement, -1, ci, sptypes, opt.slottypes, opt.params)
+        cost(statement) = 0
+        function cost(statement::Expr)
+            Core.Compiler.statement_cost(statement, -1, ci, opt.sptypes, opt.slottypes, opt.params)
+        end
+        costs = map(cost, ci.code)
+        cost_threshold = opt.params.inline_cost_threshold
+        summary = CostsSummary(cost_threshold, costs)
+        hint_messages = Vector{Tuple{Int,Hint}}()
+        CodeCostsInfo(ci, costs, summary, hint_messages)
     end
-    costs = map(cost, ci.code)
-    cost_threshold = opt.params.inline_cost_threshold
-    summary = CostsSummary(cost_threshold, costs)
-    hint_messages = Vector{Tuple{Int,Hint}}()
-    CodeCostsInfo(ci, costs, summary, hint_messages)
+else
+    function code_costs(f, types; debuginfo=:default,
+                        params::Core.Compiler.Params=Core.Compiler.Params(typemax(UInt)),
+                        hints=:default)
+
+        mi = Base.method_instances(f, types)[1]
+        ci = code_typed(f, types)[1][1]
+        # eliminate code_coverage_effect
+        filter!(statement->!Meta.isexpr(statement, :code_coverage_effect), ci.code)
+
+        opt = Core.Compiler.OptimizationState(mi, params)
+        opt.src.inlineable = true
+        sptypes = :sptypes in fieldnames(typeof(opt)) ? opt.sptypes : opt.sp
+
+        cost(statement) = 0
+        function cost(statement::Expr)
+            Core.Compiler.statement_cost(statement, -1, ci, sptypes, opt.slottypes, opt.params)
+        end
+        costs = map(cost, ci.code)
+        cost_threshold = opt.params.inline_cost_threshold
+        summary = CostsSummary(cost_threshold, costs)
+        hint_messages = Vector{Tuple{Int,Hint}}()
+        CodeCostsInfo(ci, costs, summary, hint_messages)
+    end
 end
 
 function Base.show(io::IO, costsinfo::CodeCostsInfo; debuginfo::Symbol=:source)
