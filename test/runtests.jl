@@ -2,6 +2,13 @@ using CodeCosts
 using InteractiveUtils
 using Test
 
+if get(ENV, "TRAVIS", "false") == "true"
+    # force :color => true
+    Base.get(::Base.PipeEndpoint, key::Symbol, default) = key === :color ? true : default
+    # avoid the `light` colors
+    ENV["JULIA_ERROR_COLOR"] = :red
+end
+
 @inline func_000(x::T) where T = (x + 1/3, x - oneunit(T), x / 3.0, x * 5.0)
 
 buf = IOBuffer()
