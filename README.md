@@ -1,4 +1,7 @@
 # CodeCosts.jl
+[![Build Status](https://travis-ci.com/kimikage/CodeCosts.jl.svg?branch=master)](https://travis-ci.com/kimikage/CodeCosts.jl)
+[![PkgEval](https://juliaci.github.io/NanosoldierReports/pkgeval_badges/C/CodeCosts.svg)](https://juliaci.github.io/NanosoldierReports/pkgeval_badges/report.html)
+[![Codecov](https://codecov.io/gh/kimikage/CodeCosts.jl/branch/master/graph/badge.svg)](https://codecov.io/gh/kimikage/CodeCosts.jl)
 
 This package provides a variant of `@code_typed` with [estimated costs for the
 inlining](https://docs.julialang.org/en/v1/devdocs/inference/#The-inlining-algorithm-(inline_worthy)-1).
@@ -22,7 +25,7 @@ CodeCostsInfo(
    1 │   %7  = Base.slt_int(%6, 0)::Bool
    1 │   %8  = Base.bitcast(Base.Int64, %2)::Int64
    1 │   %9  = Base.slt_int(%8, 0)::Bool
-   1 │   %10 = Base.not_int(%7)::Bool
+   0 │   %10 = Base.not_int(%7)::Bool
    1 │   %11 = Base.and_int(%9, %10)::Bool
    1 │   %12 = Base.or_int(%5, %11)::Bool
    2 │   %13 = Base.ne_float(%2, %2)::Bool
@@ -34,10 +37,10 @@ CodeCostsInfo(
    0 └──       return %18
      )
 , CodeCostsSummary(
-     zero:  1|
-    cheap: 13| 1111111111111
+     zero:  2|
+    cheap: 12| 111111111111
    middle: 10| 4===2=2=2=
 expensive: 20| 20==================
-    total: 43| 100 (default threshold)
+    total: 42| 100 (default threshold)
 ))
 ```

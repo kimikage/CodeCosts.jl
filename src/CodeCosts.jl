@@ -51,14 +51,12 @@ macro code_costs(ex0...)
 end
 
 if isdefined(Core.Compiler, :OptimizationParams)
-    function code_costs(f, types; debuginfo=:default,
+    function code_costs(f, types; debuginfo::Symbol=:default,
                         params::Core.Compiler.OptimizationParams=Core.Compiler.OptimizationParams(),
-                        hints=:default)
+                        hints::Symbol=:default)
 
         mi = Base.method_instances(f, types)[1]
-        ci = code_typed(f, types)[1][1]
-        # eliminate code_coverage_effect
-        filter!(statement->!Meta.isexpr(statement, :code_coverage_effect), ci.code)
+        ci = code_typed(f, types; debuginfo=debuginfo)[1][1]
 
         interp = Core.Compiler.NativeInterpreter()
         opt = Core.Compiler.OptimizationState(mi, params, interp)
@@ -67,21 +65,23 @@ if isdefined(Core.Compiler, :OptimizationParams)
         function cost(statement::Expr)
             Core.Compiler.statement_cost(statement, -1, ci, opt.sptypes, opt.slottypes, opt.params)
         end
-        costs = map(cost, ci.code)
+        raw_costs = map(cost, ci.code)
         cost_threshold = opt.params.inline_cost_threshold
-        summary = CostsSummary(cost_threshold, costs)
+        summary = CostsSummary(cost_threshold, costs(raw_costs, ci))
         hint_messages = Vector{Tuple{Int,Hint}}()
-        CodeCostsInfo(ci, costs, summary, hint_messages)
+        CodeCostsInfo(ci, raw_costs, summary, hint_messages)
     end
 else
-    function code_costs(f, types; debuginfo=:default,
+    function code_costs(f, types; debuginfo::Symbol=:default,
                         params::Core.Compiler.Params=Core.Compiler.Params(typemax(UInt)),
-                        hints=:default)
+                        hints::Symbol=:default)
 
         mi = Base.method_instances(f, types)[1]
-        ci = code_typed(f, types)[1][1]
-        # eliminate code_coverage_effect
-        filter!(statement->!Meta.isexpr(statement, :code_coverage_effect), ci.code)
+        if VERSION >= v"1.1"
+            ci = code_typed(f, types; debuginfo=debuginfo)[1][1]
+        else
+            ci = code_typed(f, types)[1][1]
+        end
 
         opt = Core.Compiler.OptimizationState(mi, params)
         opt.src.inlineable = true
@@ -91,30 +91,58 @@ else
         function cost(statement::Expr)
             Core.Compiler.statement_cost(statement, -1, ci, sptypes, opt.slottypes, opt.params)
         end
-        costs = map(cost, ci.code)
+        raw_costs = map(cost, ci.code)
         cost_threshold = opt.params.inline_cost_threshold
-        summary = CostsSummary(cost_threshold, costs)
+        summary = CostsSummary(cost_threshold, costs(raw_costs, ci))
         hint_messages = Vector{Tuple{Int,Hint}}()
-        CodeCostsInfo(ci, costs, summary, hint_messages)
+        CodeCostsInfo(ci, raw_costs, summary, hint_messages)
     end
 end
 
+function _code_hash(s::String)
+    h = UInt(0)
+    for c in codeunits(replace(s, r"\e\[[^m]*m" => ""))
+        h = (0x20 < c) & (c < 0x80) ? hash(c, h) : h
+    end
+    h
+end
+
 function Base.show(io::IO, costsinfo::CodeCostsInfo; debuginfo::Symbol=:source)
-    buf = IOBuffer()
+    buf_s = IOBuffer()
+    buf_n = IOBuffer()
     if VERSION >= v"1.1"
-        show(IOContext(buf, io), costsinfo.ci, debuginfo=debuginfo)
+        show(IOContext(buf_s, io), costsinfo.ci, debuginfo=debuginfo)
+        debuginfo !== :none && show(buf_n, costsinfo.ci, debuginfo=:none)
     else
-        show(IOContext(buf, io), costsinfo.ci)
+        show(IOContext(buf_s, io), costsinfo.ci)
     end
     println(io, "CodeCostsInfo(")
 
-    seekstart(buf)
-    lines = readlines(buf)
-    i = 0
-    for line in lines
-        l = replace(line, r"\e\[1G" => "\e[6G")
-        if 0 < i <= length(costsinfo.costs)
-            c = costsinfo.costs[i]
+    seekstart(buf_s)
+    seekstart(buf_n)
+    idx = 0
+    nhash = _code_hash(readline(buf_n))
+    for line in readlines(buf_s)
+        l = VERSION >= v"1.1" ? line : replace(line, "\e[1G" => "\e[6G")
+
+        if VERSION >= v"1.1" && debuginfo !== :none
+            shash = _code_hash(l)
+            if shash !== nhash
+                println(io, " "^5, line)
+                continue
+            end
+            n = readline(buf_n)
+            nhash = _code_hash(n)
+        end
+
+        if 0 < idx <= length(costsinfo.costs)
+            # skip code_coverage_effect
+            if Meta.isexpr(costsinfo.ci.code[idx], :code_coverage_effect)
+                idx += 1
+                continue
+            end
+
+            c = costsinfo.costs[idx]
             cs = lpad(string(c), 4)
             if c == 1
                 println(io, cs, " ", l)
@@ -127,7 +155,7 @@ function Base.show(io::IO, costsinfo::CodeCostsInfo; debuginfo::Symbol=:source)
         else
             println(io, " "^5, l)
         end
-        i += 1
+        idx += 1
     end
     print(io, ", ")
     print(io, costsinfo.summary)
@@ -167,5 +195,14 @@ function costs_string(costs::Vector{Int})
     end
     String(take!(buf))
 end
+
+function costs(raw_costs::Vector{Int}, ci::Core.CodeInfo)
+    cs = Int[]
+    for (i, c) in enumerate(raw_costs)
+        Meta.isexpr(ci.code[i], :code_coverage_effect) || push!(cs, c)
+    end
+    cs
+end
+costs(costsinfo::CodeCosts.CodeCostsInfo) = costs(costsinfo.costs, costsinfo.ci)
 
 end # module
