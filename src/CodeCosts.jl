@@ -128,7 +128,7 @@ function Base.show(io::IO, costsinfo::CodeCostsInfo; debuginfo::Symbol=:source)
         if VERSION >= v"1.1" && debuginfo !== :none
             shash = _code_hash(l)
             if shash !== nhash
-                println(io, " "^5, line)
+                println(io, " "^5, l)
                 continue
             end
             n = readline(buf_n)
@@ -136,6 +136,11 @@ function Base.show(io::IO, costsinfo::CodeCostsInfo; debuginfo::Symbol=:source)
         end
 
         if 0 < idx <= length(costsinfo.costs)
+            # multi-line statement
+            if !occursin(r"(?:^|\e\[6G)(?:\e\[[^m]*m|\s)*(?:\d+ |│|└)", l)
+                println(io, " "^5, l)
+                continue
+            end
             # skip code_coverage_effect
             if Meta.isexpr(costsinfo.ci.code[idx], :code_coverage_effect)
                 idx += 1
